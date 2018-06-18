@@ -1,0 +1,429 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "virtualNetworkName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Virtual Network."
+      }
+    },
+    "applicationGatewayName": {
+      "type": "string",
+      "defaultValue": "testappgw",
+      "metadata": {
+        "description": "Application Gateway Name"
+      }
+    },
+    "applicationGatewaySize": {
+      "type": "string",
+      "allowedValues": [
+        "WAF_Medium",
+        "WAF_Large"
+      ],
+      "defaultValue": "WAF_Medium",
+      "metadata": {
+        "description": "Application Gateway size, using WAF"
+      }
+    },
+    "wafMode": {
+      "type": "string",
+      "allowedValues": [
+        "Detection",
+        "Prevention"
+      ],
+      "defaultValue": "Detection",
+      "metadata": {
+        "description": "WAF Mode"
+      }
+    },
+    "applicationGatewayInstanceCount": {
+      "type": "int",
+      "allowedValues": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "defaultValue": 2,
+      "metadata": {
+        "description": "application gateway instance count"
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "minLength": 1,
+      "metadata": {
+        "description": "Username for the Virtual Machine."
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Password for the Virtual Machine."
+      }
+    }
+  },
+  "variables": {
+    "VNetPrefix": "10.0.0.0/16",
+
+    // Subnet Names and Prefixes
+    "Subnet1Name": "Logstash-Subnet",
+    "Subnet1Prefix": "10.0.1.0/24",
+    "Subnet2Name": "Kibana-Subnet",
+    "Subnet2Prefix": "10.0.2.0/24",
+    "Subnet3Name": "HostedWatchers-Subnet",
+    "Subnet3Prefix": "10.0.3.0/24",
+    "Subnet4Name": "InternalResources-Subnet",
+    "Subnet4Prefix": "10.0.4.0/24",
+    "Subnet5Name": "Management-Subnet",
+    "Subnet5Prefix": "10.0.5.0/24",
+    "Subnet6Name": "AppGw-Subnet",
+    "Subnet6Prefix": "10.0.6.0/24",
+
+    // Subnet Reference for Application Gateway
+    "Subnet6Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet6Name'))]",
+
+    // Variables for test VMs
+    "imagePublisher": "MicrosoftWindowsServer",
+    "imageOffer": "WindowsServer",
+    "windowsOSVersion": "2016-Datacenter",
+    "virtualMachineSize": "Standard_D2_v2",
+    "numberOfVMs": 2,
+    "vmNamePrefix": "iisvm",
+
+    "webSubnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet1Name'))]",
+    "vmAvailabilitySetName": "IISAvailabilitySet",
+
+    "listVmPrivateIpAddresses": [ "10.0.1.4", "10.0.1.5" ],
+
+    // Application Gateway variables
+    "appGwPublicIpName": "ApplicationGatewayPublicIp",
+    "appGatewaySubnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet6Name'))]",
+    "appGwPublicIPRef": "[resourceId('Microsoft.Network/publicIPAddresses',variables('appGwPublicIpName'))]",
+
+    "applicationGatewayID": "[resourceId('Microsoft.Network/applicationGateways',parameters('applicationGatewayName'))]",
+    "wafRuleSetType": "OWASP",
+    "wafRuleSetVersion": "3.0"
+  },
+  "resources": [
+    {
+      "name": "[parameters('virtualNetworkName')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "VNet"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('VNetPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('Subnet1Name')]",
+            "properties": {
+              "addressPrefix": "[variables('Subnet1Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('Subnet2Name')]",
+            "properties": {
+              "addressPrefix": "[variables('Subnet2Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('Subnet3Name')]",
+            "properties": {
+              "addressPrefix": "[variables('Subnet3Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('Subnet4Name')]",
+            "properties": {
+              "addressPrefix": "[variables('Subnet4Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('Subnet5Name')]",
+            "properties": {
+              "addressPrefix": "[variables('Subnet5Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('Subnet6Name')]",
+            "properties": {
+              "addressPrefix": "[variables('Subnet6Prefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2017-03-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('appGwPublicIpName')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "PublicIP-AppGw"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic"
+      }
+    },
+    {
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'), 'ip1')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "PublicIP-VMs"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic"
+      },
+      "copy": {
+        "count": "[variables('numberOfVMs')]",
+        "name": "publicIPLoop"
+      }
+    },
+    {
+      "apiVersion": "2017-06-01",
+      "name": "[parameters('applicationGatewayName')]",
+      "type": "Microsoft.Network/applicationGateways",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "ApplicationGateway"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/', parameters('virtualNetworkName'))]",
+        "[resourceId('Microsoft.Network/publicIPAddresses/', variables('appGwPublicIpName'))]"
+      ],
+      "properties": {
+        "sku": {
+          "name": "[parameters('applicationGatewaySize')]",
+          "tier": "WAF",
+          "capacity": "[parameters('applicationGatewayInstanceCount')]"
+        },
+        "gatewayIPConfigurations": [
+          {
+            "name": "appGatewayIpConfig",
+            "properties": {
+              "subnet": {
+                "id": "[variables('Subnet6Ref')]"
+              }
+            }
+          }
+        ],
+        "frontendIPConfigurations": [
+          {
+            "name": "appGatewayFrontendIP",
+            "properties": {
+              "PublicIPAddress": {
+                "id": "[variables('appGwPublicIPRef')]"
+              }
+            }
+          }
+        ],
+        "frontendPorts": [
+          {
+            "name": "appGatewayFrontendPort",
+            "properties": {
+              "Port": 80
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "appGatewayBackendPool",
+            "properties": {
+              "BackendAddresses": [
+                {
+                  "IpAddress": "[variables('listVmPrivateIpAddresses')[0]]"
+                },
+                {
+                  "IpAddress": "[variables('listVmPrivateIpAddresses')[1]]"
+                }
+              ]
+            }
+          }
+        ],
+        "backendHttpSettingsCollection": [
+          {
+            "name": "appGatewayBackendHttpSettings",
+            "properties": {
+              "Port": 80,
+              "Protocol": "Http",
+              "CookieBasedAffinity": "Disabled"
+            }
+          }
+        ],
+        "httpListeners": [
+          {
+            "name": "appGatewayHttpListener",
+            "properties": {
+              "FrontendIPConfiguration": {
+                "Id": "[concat(variables('applicationGatewayID'), '/frontendIPConfigurations/appGatewayFrontendIP')]"
+              },
+              "FrontendPort": {
+                "Id": "[concat(variables('applicationGatewayID'), '/frontendPorts/appGatewayFrontendPort')]"
+              },
+              "Protocol": "Http",
+              "SslCertificate": null
+            }
+          }
+        ],
+        "requestRoutingRules": [
+          {
+            "Name": "rule1",
+            "properties": {
+              "RuleType": "Basic",
+              "httpListener": {
+                "id": "[concat(variables('applicationGatewayID'), '/httpListeners/appGatewayHttpListener')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(variables('applicationGatewayID'), '/backendAddressPools/appGatewayBackendPool')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(variables('applicationGatewayID'), '/backendHttpSettingsCollection/appGatewayBackendHttpSettings')]"
+              }
+            }
+          }
+        ],
+        "webApplicationFirewallConfiguration": {
+          "enabled": true,
+          "firewallMode": "[parameters('wafMode')]",
+          "ruleSetType": "[variables('wafRuleSetType')]",
+          "ruleSetVersion": "[variables('wafRuleSetVersion')]",
+          "disabledRuleGroups": []
+        }
+      }
+    },
+    {
+      "apiVersion": "2017-03-01",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "NIC-VMs"
+      },
+      "copy": {
+        "count": "[variables('numberOfVMs')]",
+        "name": "nicLoop"
+      },
+      "dependsOn": [
+        "publicIPLoop",
+        "[resourceId('Microsoft.Network/virtualNetworks/', parameters('virtualNetworkName'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "properties": {
+              "subnet": {
+                "id": "[variables('webSubnetRef')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses',concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'),'ip1'))]"
+              },
+              "privateIPAddress": "[variables('listVmPrivateIpAddresses')[copyIndex()]]",
+              "privateIPAllocationMethod": "Static"
+            },
+            "name": "ipcon"
+          }
+        ]
+      }
+
+    },
+    {
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
+      "location": "[resourceGroup().location]",
+      "copy": {
+        "count": "[variables('numberOfVMs')]",
+        "name": "virtualMachineLoop"
+      },
+      "tags": {
+        "displayName": "VMs"
+      },
+      "dependsOn": [
+        "nicLoop"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('virtualMachineSize')]"
+        },
+        "osProfile": {
+          "computerName": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('imagePublisher')]",
+            "offer": "[variables('imageOffer')]",
+            "sku": "[variables('windowsOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[concat('VD-',variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'), '-OS-Disk')]",
+            "caching": "ReadWrite",
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "Standard_LRS"
+            }
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat('',variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1'))]",
+              "properties": {
+                "primary": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "apiVersion": "2017-12-01",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'),'/','CustomScriptExtension')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "CustomScriptExtension-IIS"
+      },
+      "copy": {
+        "count": "[variables('numberOfVMs')]",
+        "name": "extensionLoop"
+      },
+      "dependsOn": [
+        "virtualMachineLoop"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Compute",
+        "type": "CustomScriptExtension",
+        "typeHandlerVersion": "1.8",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "fileUris": [
+            "https://raw.githubusercontent.com/cap273/Azure-PowerShell/master/Install-IIS-Simple.ps1"
+          ],
+          "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -File Install-IIS-Simple.ps1"
+        },
+        "protectedSettings": {}
+      }
+    }
+  ],
+  "outputs": {}
+}
