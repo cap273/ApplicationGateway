@@ -11,7 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>ddec2097-6a2b-4073-933c-bc81be9f02c0</ProjectGuid>
+    <ProjectGuid>bafb56fd-40bb-4323-93ae-c9cb06ba8037</ProjectGuid>
   </PropertyGroup>
   <PropertyGroup>
     <PrepareForBuildDependsOn>
