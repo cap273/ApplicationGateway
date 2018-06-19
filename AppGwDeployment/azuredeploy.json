@@ -51,7 +51,7 @@
         9,
         10
       ],
-      "defaultValue": 2,
+      "defaultValue": 1,
       "metadata": {
         "description": "application gateway instance count"
       }
@@ -71,6 +71,8 @@
     }
   },
   "variables": {
+
+    // Overall VNet Prefix
     "VNetPrefix": "10.0.0.0/16",
 
     // Subnet Names and Prefixes
@@ -87,6 +89,10 @@
     "Subnet6Name": "AppGw-Subnet",
     "Subnet6Prefix": "10.0.6.0/24",
 
+    // Subnet Reference for Test VMs
+    "Subnet1Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet1Name'))]",
+    "Subnet2Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet2Name'))]",
+
     // Subnet Reference for Application Gateway
     "Subnet6Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet6Name'))]",
 
@@ -94,20 +100,23 @@
     "imagePublisher": "MicrosoftWindowsServer",
     "imageOffer": "WindowsServer",
     "windowsOSVersion": "2016-Datacenter",
-    "virtualMachineSize": "Standard_D2_v2",
-    "numberOfVMs": 2,
-    "vmNamePrefix": "iisvm",
+    "virtualMachineSize": "Standard_D1_v2",
+    "numberOfVMsPerGroup": 2,
 
-    "webSubnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet1Name'))]",
-    "vmAvailabilitySetName": "IISAvailabilitySet",
-
-    "listVmPrivateIpAddresses": [ "10.0.1.4", "10.0.1.5" ],
+    // Test VM name prefixes, static private IP addresses, and DNS names
+    "ingestionVmNamePrefix": "ingestvm",
+    "ingestionListVmPrivateIpAddresses": [ "10.0.1.4", "10.0.1.5" ],
+    "ingestionDnsName": "ingestion.carlostestdomain.com",
+    "customerVmNamePrefix": "custvm",
+    "customerListVmPrivateIpAddresses": [ "10.0.2.4", "10.0.2.5" ],
+    "customerDnsName": "velocity.carlostestdomain.com",
+    "c4VmNamePrefix": "c4vm",
+    "c4ListVmPrivateIpAddresses": [ "10.0.2.6", "10.0.2.7" ],
+    "c4DnsName": "command.carlostestdomain.com",
 
     // Application Gateway variables
     "appGwPublicIpName": "ApplicationGatewayPublicIp",
-    "appGatewaySubnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet6Name'))]",
     "appGwPublicIPRef": "[resourceId('Microsoft.Network/publicIPAddresses',variables('appGwPublicIpName'))]",
-
     "applicationGatewayID": "[resourceId('Microsoft.Network/applicationGateways',parameters('applicationGatewayName'))]",
     "wafRuleSetType": "OWASP",
     "wafRuleSetVersion": "3.0"
@@ -181,22 +190,6 @@
       }
     },
     {
-      "apiVersion": "2016-03-30",
-      "type": "Microsoft.Network/publicIPAddresses",
-      "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'), 'ip1')]",
-      "location": "[resourceGroup().location]",
-      "tags": {
-        "displayName": "PublicIP-VMs"
-      },
-      "properties": {
-        "publicIPAllocationMethod": "Dynamic"
-      },
-      "copy": {
-        "count": "[variables('numberOfVMs')]",
-        "name": "publicIPLoop"
-      }
-    },
-    {
       "apiVersion": "2017-06-01",
       "name": "[parameters('applicationGatewayName')]",
       "type": "Microsoft.Network/applicationGateways",
@@ -236,22 +229,54 @@
         ],
         "frontendPorts": [
           {
-            "name": "appGatewayFrontendPort",
+            "name": "FrontendPort-80",
             "properties": {
               "Port": 80
+            }
+          },
+          {
+            "name": "FrontendPort-5044",
+            "properties": {
+              "Port": 5044
             }
           }
         ],
         "backendAddressPools": [
           {
-            "name": "appGatewayBackendPool",
+            "name": "Ingestion-BackendPool",
             "properties": {
               "BackendAddresses": [
                 {
-                  "IpAddress": "[variables('listVmPrivateIpAddresses')[0]]"
+                  "ipAddress": "[variables('ingestionListVmPrivateIpAddresses')[0]]"
                 },
                 {
-                  "IpAddress": "[variables('listVmPrivateIpAddresses')[1]]"
+                  "ipAddress": "[variables('ingestionListVmPrivateIpAddresses')[1]]"
+                }
+              ]
+            }
+          },
+          {
+            "name": "Customer-BackendPool",
+            "properties": {
+              "BackendAddresses": [
+                {
+                  "ipAddress": "[variables('customerListVmPrivateIpAddresses')[0]]"
+                },
+                {
+                  "ipAddress": "[variables('customerListVmPrivateIpAddresses')[1]]"
+                }
+              ]
+            }
+          },
+          {
+            "name": "C4-BackendPool",
+            "properties": {
+              "BackendAddresses": [
+                {
+                  "ipAddress": "[variables('c4ListVmPrivateIpAddresses')[0]]"
+                },
+                {
+                  "ipAddress": "[variables('c4ListVmPrivateIpAddresses')[1]]"
                 }
               ]
             }
@@ -259,42 +284,120 @@
         ],
         "backendHttpSettingsCollection": [
           {
-            "name": "appGatewayBackendHttpSettings",
+            "name": "Ingestion-BackendHttpSettings",
             "properties": {
               "Port": 80,
               "Protocol": "Http",
               "CookieBasedAffinity": "Disabled"
             }
+          },
+          {
+            "name": "Customer-BackendHttpSettings",
+            "properties": {
+              "Port": 80,
+              "Protocol": "Http",
+              "CookieBasedAffinity": "Enabled"
+            }
+          },
+          {
+            "name": "C4-BackendHttpSettings",
+            "properties": {
+              "Port": 80,
+              "Protocol": "Http",
+              "CookieBasedAffinity": "Enabled"
+            }
           }
         ],
         "httpListeners": [
           {
-            "name": "appGatewayHttpListener",
+            "name": "Ingestion-Listener-HTTP-5044",
             "properties": {
               "FrontendIPConfiguration": {
                 "Id": "[concat(variables('applicationGatewayID'), '/frontendIPConfigurations/appGatewayFrontendIP')]"
               },
               "FrontendPort": {
-                "Id": "[concat(variables('applicationGatewayID'), '/frontendPorts/appGatewayFrontendPort')]"
+                "Id": "[concat(variables('applicationGatewayID'), '/frontendPorts/FrontendPort-5044')]"
               },
               "Protocol": "Http",
-              "SslCertificate": null
+              "SslCertificate": null,
+              "HostName": "[variables('ingestionDnsName')]",
+              "RequireServerNameIndication": "false"
+            }
+          },
+          {
+            "name": "Customer-Listener-HTTP-80",
+            "properties": {
+              "FrontendIPConfiguration": {
+                "Id": "[concat(variables('applicationGatewayID'), '/frontendIPConfigurations/appGatewayFrontendIP')]"
+              },
+              "FrontendPort": {
+                "Id": "[concat(variables('applicationGatewayID'), '/frontendPorts/FrontendPort-80')]"
+              },
+              "Protocol": "Http",
+              "SslCertificate": null,
+              "HostName": "[variables('customerDnsName')]",
+              "RequireServerNameIndication": "false"
+            }
+          },
+          {
+            "name": "C4-Listener-HTTP-80",
+            "properties": {
+              "FrontendIPConfiguration": {
+                "Id": "[concat(variables('applicationGatewayID'), '/frontendIPConfigurations/appGatewayFrontendIP')]"
+              },
+              "FrontendPort": {
+                "Id": "[concat(variables('applicationGatewayID'), '/frontendPorts/FrontendPort-80')]"
+              },
+              "Protocol": "Http",
+              "SslCertificate": null,
+              "HostName": "[variables('c4DnsName')]",
+              "RequireServerNameIndication": "false"
             }
           }
         ],
         "requestRoutingRules": [
           {
-            "Name": "rule1",
+            "Name": "Ingestion-RoutingRule-Basic",
             "properties": {
               "RuleType": "Basic",
               "httpListener": {
-                "id": "[concat(variables('applicationGatewayID'), '/httpListeners/appGatewayHttpListener')]"
+                "id": "[concat(variables('applicationGatewayID'), '/httpListeners/Ingestion-Listener-HTTP-5044')]"
               },
               "backendAddressPool": {
-                "id": "[concat(variables('applicationGatewayID'), '/backendAddressPools/appGatewayBackendPool')]"
+                "id": "[concat(variables('applicationGatewayID'), '/backendAddressPools/Ingestion-BackendPool')]"
               },
               "backendHttpSettings": {
-                "id": "[concat(variables('applicationGatewayID'), '/backendHttpSettingsCollection/appGatewayBackendHttpSettings')]"
+                "id": "[concat(variables('applicationGatewayID'), '/backendHttpSettingsCollection/Ingestion-BackendHttpSettings')]"
+              }
+            }
+          },
+          {
+            "Name": "Customer-RoutingRule-Basic",
+            "properties": {
+              "RuleType": "Basic",
+              "httpListener": {
+                "id": "[concat(variables('applicationGatewayID'), '/httpListeners/Customer-Listener-HTTP-80')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(variables('applicationGatewayID'), '/backendAddressPools/Customer-BackendPool')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(variables('applicationGatewayID'), '/backendHttpSettingsCollection/Customer-BackendHttpSettings')]"
+              }
+            }
+          },
+          {
+            "Name": "C4-RoutingRule-Basic",
+            "properties": {
+              "RuleType": "Basic",
+              "httpListener": {
+                "id": "[concat(variables('applicationGatewayID'), '/httpListeners/C4-Listener-HTTP-80')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(variables('applicationGatewayID'), '/backendAddressPools/C4-BackendPool')]"
+              },
+              "backendHttpSettings": {
+                "id": "[concat(variables('applicationGatewayID'), '/backendHttpSettingsCollection/C4-BackendHttpSettings')]"
               }
             }
           }
@@ -311,17 +414,16 @@
     {
       "apiVersion": "2017-03-01",
       "type": "Microsoft.Network/networkInterfaces",
-      "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1')]",
+      "name": "[concat(variables('ingestionVmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1')]",
       "location": "[resourceGroup().location]",
       "tags": {
-        "displayName": "NIC-VMs"
+        "displayName": "Ingestion-NIC-VMs"
       },
       "copy": {
-        "count": "[variables('numberOfVMs')]",
-        "name": "nicLoop"
+        "count": "[variables('numberOfVMsPerGroup')]",
+        "name": "ingestionNicLoop"
       },
       "dependsOn": [
-        "publicIPLoop",
         "[resourceId('Microsoft.Network/virtualNetworks/', parameters('virtualNetworkName'))]"
       ],
       "properties": {
@@ -329,41 +431,97 @@
           {
             "properties": {
               "subnet": {
-                "id": "[variables('webSubnetRef')]"
+                "id": "[variables('Subnet1Ref')]"
               },
-              "publicIPAddress": {
-                "id": "[resourceId('Microsoft.Network/publicIPAddresses',concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'),'ip1'))]"
-              },
-              "privateIPAddress": "[variables('listVmPrivateIpAddresses')[copyIndex()]]",
+              "privateIPAddress": "[variables('ingestionListVmPrivateIpAddresses')[copyIndex()]]",
               "privateIPAllocationMethod": "Static"
             },
             "name": "ipcon"
           }
         ]
       }
-
+    },
+    {
+      "apiVersion": "2017-03-01",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(variables('customerVmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "Customer-NIC-VMs"
+      },
+      "copy": {
+        "count": "[variables('numberOfVMsPerGroup')]",
+        "name": "customerNicLoop"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/', parameters('virtualNetworkName'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "properties": {
+              "subnet": {
+                "id": "[variables('Subnet2Ref')]"
+              },
+              "privateIPAddress": "[variables('customerListVmPrivateIpAddresses')[copyIndex()]]",
+              "privateIPAllocationMethod": "Static"
+            },
+            "name": "ipcon"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2017-03-01",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(variables('c4VmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "C4-NIC-VMs"
+      },
+      "copy": {
+        "count": "[variables('numberOfVMsPerGroup')]",
+        "name": "c4NicLoop"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/', parameters('virtualNetworkName'))]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "properties": {
+              "subnet": {
+                "id": "[variables('Subnet2Ref')]"
+              },
+              "privateIPAddress": "[variables('c4ListVmPrivateIpAddresses')[copyIndex()]]",
+              "privateIPAllocationMethod": "Static"
+            },
+            "name": "ipcon"
+          }
+        ]
+      }
     },
     {
       "apiVersion": "2017-03-30",
       "type": "Microsoft.Compute/virtualMachines",
-      "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
+      "name": "[concat(variables('ingestionVmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
       "location": "[resourceGroup().location]",
       "copy": {
-        "count": "[variables('numberOfVMs')]",
-        "name": "virtualMachineLoop"
+        "count": "[variables('numberOfVMsPerGroup')]",
+        "name": "ingestionVirtualMachineLoop"
       },
       "tags": {
-        "displayName": "VMs"
+        "displayName": "Ingestion-VMs"
       },
       "dependsOn": [
-        "nicLoop"
+        "ingestionNicLoop"
       ],
       "properties": {
         "hardwareProfile": {
           "vmSize": "[variables('virtualMachineSize')]"
         },
         "osProfile": {
-          "computerName": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
+          "computerName": "[concat(variables('ingestionVmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
           "adminUsername": "[parameters('adminUsername')]",
           "adminPassword": "[parameters('adminPassword')]"
         },
@@ -375,7 +533,7 @@
             "version": "latest"
           },
           "osDisk": {
-            "name": "[concat('VD-',variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'), '-OS-Disk')]",
+            "name": "[concat('VD-',variables('ingestionVmNamePrefix'), padLeft(copyindex(1),2,'0'), '-OS-Disk')]",
             "caching": "ReadWrite",
             "createOption": "FromImage",
             "managedDisk": {
@@ -386,7 +544,111 @@
         "networkProfile": {
           "networkInterfaces": [
             {
-              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat('',variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1'))]",
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat('',variables('ingestionVmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1'))]",
+              "properties": {
+                "primary": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(variables('customerVmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
+      "location": "[resourceGroup().location]",
+      "copy": {
+        "count": "[variables('numberOfVMsPerGroup')]",
+        "name": "customerVirtualMachineLoop"
+      },
+      "tags": {
+        "displayName": "Customer-VMs"
+      },
+      "dependsOn": [
+        "customerNicLoop"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('virtualMachineSize')]"
+        },
+        "osProfile": {
+          "computerName": "[concat(variables('customerVmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('imagePublisher')]",
+            "offer": "[variables('imageOffer')]",
+            "sku": "[variables('windowsOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[concat('VD-',variables('customerVmNamePrefix'), padLeft(copyindex(1),2,'0'), '-OS-Disk')]",
+            "caching": "ReadWrite",
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "Standard_LRS"
+            }
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat('',variables('customerVmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1'))]",
+              "properties": {
+                "primary": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(variables('c4VmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
+      "location": "[resourceGroup().location]",
+      "copy": {
+        "count": "[variables('numberOfVMsPerGroup')]",
+        "name": "c4VirtualMachineLoop"
+      },
+      "tags": {
+        "displayName": "C4-VMs"
+      },
+      "dependsOn": [
+        "c4NicLoop"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('virtualMachineSize')]"
+        },
+        "osProfile": {
+          "computerName": "[concat(variables('c4VmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('imagePublisher')]",
+            "offer": "[variables('imageOffer')]",
+            "sku": "[variables('windowsOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[concat('VD-',variables('c4VmNamePrefix'), padLeft(copyindex(1),2,'0'), '-OS-Disk')]",
+            "caching": "ReadWrite",
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "Standard_LRS"
+            }
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat('',variables('c4VmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1'))]",
               "properties": {
                 "primary": true
               }
@@ -398,17 +660,17 @@
     {
       "apiVersion": "2017-12-01",
       "type": "Microsoft.Compute/virtualMachines/extensions",
-      "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'),'/','CustomScriptExtension')]",
+      "name": "[concat(variables('ingestionVmNamePrefix'), padLeft(copyindex(1),2,'0'),'/','CustomScriptExtension')]",
       "location": "[resourceGroup().location]",
       "tags": {
-        "displayName": "CustomScriptExtension-IIS"
+        "displayName": "Ingestion-CustomScriptExtension-IIS"
       },
       "copy": {
-        "count": "[variables('numberOfVMs')]",
-        "name": "extensionLoop"
+        "count": "[variables('numberOfVMsPerGroup')]",
+        "name": "ingestionExtensionLoop"
       },
       "dependsOn": [
-        "virtualMachineLoop"
+        "ingestionVirtualMachineLoop"
       ],
       "properties": {
         "publisher": "Microsoft.Compute",
@@ -417,13 +679,72 @@
         "autoUpgradeMinorVersion": true,
         "settings": {
           "fileUris": [
-            "https://raw.githubusercontent.com/cap273/Azure-PowerShell/master/Install-IIS-Simple.ps1"
+            "https://raw.githubusercontent.com/davidmu1/samplescripts/master/appgatewayurl.ps1"
           ],
-          "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -File Install-IIS-Simple.ps1"
+          "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -File appgatewayurl.ps1"
+        },
+        "protectedSettings": {}
+      }
+    },
+    {
+      "apiVersion": "2017-12-01",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(variables('customerVmNamePrefix'), padLeft(copyindex(1),2,'0'),'/','CustomScriptExtension')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "Customer-CustomScriptExtension-IIS"
+      },
+      "copy": {
+        "count": "[variables('numberOfVMsPerGroup')]",
+        "name": "customerExtensionLoop"
+      },
+      "dependsOn": [
+        "customerVirtualMachineLoop"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Compute",
+        "type": "CustomScriptExtension",
+        "typeHandlerVersion": "1.8",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "fileUris": [
+            "https://raw.githubusercontent.com/davidmu1/samplescripts/master/appgatewayurl.ps1"
+          ],
+          "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -File appgatewayurl.ps1"
+        },
+        "protectedSettings": {}
+      }
+    },
+    {
+      "apiVersion": "2017-12-01",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(variables('c4VmNamePrefix'), padLeft(copyindex(1),2,'0'),'/','CustomScriptExtension')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "C4-CustomScriptExtension-IIS"
+      },
+      "copy": {
+        "count": "[variables('numberOfVMsPerGroup')]",
+        "name": "c4ExtensionLoop"
+      },
+      "dependsOn": [
+        "c4VirtualMachineLoop"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Compute",
+        "type": "CustomScriptExtension",
+        "typeHandlerVersion": "1.8",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "fileUris": [
+            "https://raw.githubusercontent.com/davidmu1/samplescripts/master/appgatewayurl.ps1"
+          ],
+          "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -File appgatewayurl.ps1"
         },
         "protectedSettings": {}
       }
     }
+
   ],
   "outputs": {}
 }
