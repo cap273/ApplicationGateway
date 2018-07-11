@@ -3,6 +3,10 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Excel files
+*.xlsx
+*.xls
+
 # User-specific files
 *.suo
 *.user
