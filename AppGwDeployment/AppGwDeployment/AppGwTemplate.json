@@ -88,6 +88,8 @@
     "Subnet5Prefix": "10.0.5.0/24",
     "Subnet6Name": "AppGw-Subnet",
     "Subnet6Prefix": "10.0.6.0/24",
+    "Subnet7Name": "DomainServices-Subnet",
+    "Subnet7Prefix": "10.0.7.0/24",
 
     // Subnet Reference for Test VMs
     "Subnet1Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet1Name'))]",
@@ -95,6 +97,9 @@
 
     // Subnet Reference for Application Gateway
     "Subnet6Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet6Name'))]",
+
+    // Subnet for Azure AD Domain Services (AADDS)
+    "Subnet7Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet7Name'))]",
 
     // Variables for test VMs
     "imagePublisher": "MicrosoftWindowsServer",
@@ -172,6 +177,12 @@
             "name": "[variables('Subnet6Name')]",
             "properties": {
               "addressPrefix": "[variables('Subnet6Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('Subnet7Name')]",
+            "properties": {
+              "addressPrefix": "[variables('Subnet7Prefix')]"
             }
           }
         ]

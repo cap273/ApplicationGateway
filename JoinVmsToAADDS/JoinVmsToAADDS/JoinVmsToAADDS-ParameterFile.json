@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "virtualNetworkName": {
+      "value": "testvnet"
+    },
+    "aaddsDomainName": {
+      "value": "cap273cornell.onmicrosoft.com"
+    },
+    "adminUsername": {
+      "value": "charliebrown"
+    },
+    "domainJoinUserName": {
+      "value": "charliebrown@cap273cornell.onmicrosoft.com"
+    }
+  }
+}
