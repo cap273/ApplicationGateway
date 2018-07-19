@@ -1,1 +1,1 @@
-﻿Install-WindowsFeature -Name RSAT-AD-PowerShell,RSAT-AD-AdminCenter -IncludeAllSubFeature -IncludeManagementTools
+﻿Install-WindowsFeature -Name RSAT-AD-PowerShell,RSAT-AD-AdminCenter,GPMC -IncludeAllSubFeature -IncludeManagementTools
