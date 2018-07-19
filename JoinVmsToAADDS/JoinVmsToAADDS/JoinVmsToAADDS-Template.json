@@ -67,7 +67,7 @@
     "Subnet7Prefix": "10.0.7.0/24",
 
     // Subnet Reference for Test VMs
-    "Subnet1Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet1Name'))]",
+    "Subnet1Ref": "[resourceId(parameters('virtualNetworkResourceGroup'),'Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), variables('Subnet1Name'))]",
 
     // Variables for test VMs
     "imagePublisher": "MicrosoftWindowsServer",
@@ -171,7 +171,7 @@
         "networkProfile": {
           "networkInterfaces": [
             {
-              "id": "[resourceId(parameters('virtualNetworkResourceGroup'),'Microsoft.Network/networkInterfaces',concat('',variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1'))]",
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat('',variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'), '-nic1'))]",
               "properties": {
                 "primary": true
               }
