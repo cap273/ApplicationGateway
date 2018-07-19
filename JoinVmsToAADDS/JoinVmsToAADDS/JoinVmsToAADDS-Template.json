@@ -77,7 +77,7 @@
     "numberOfVMsPerGroup": 2,
 
     // Test VM name prefixes
-    "vmNamePrefix": "testvm",
+    "vmNamePrefix": "test2vm",
 
     // Domain join variables
     "domainJoinOptions": 3
@@ -216,7 +216,7 @@
       }
     },
     {
-      // Use Custom Script Extension to install Active Directory administration tools on the virtual machine."
+      // Use Custom Script Extension to install Active Directory administration tools on the virtual machine.
       "apiVersion": "2017-12-01",
       "type": "Microsoft.Compute/virtualMachines/extensions",
       "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'),'/','CustomScriptExtension')]",
