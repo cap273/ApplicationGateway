@@ -135,8 +135,7 @@
         "displayName": "Test-VMs"
       },
       "dependsOn": [
-        "Nic-Loop",
-        "[resourceId('Microsoft.AAD/DomainServices/', parameters('aaddsDomainName'))]"
+        "Nic-Loop"
       ],
       "properties": {
         "hardwareProfile": {
@@ -176,7 +175,7 @@
       }
     },
     {
-      "comment": "Use the VM Extension JsonADDomainExtension to add the VM to the managed domain."
+      // Use the VM Extension JsonADDomainExtension to add the VM to the managed domain.
       "type": "Microsoft.Compute/virtualMachines/extensions",
       "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'),'/joindomain')]",
       "apiVersion": "2015-06-15",
@@ -208,7 +207,7 @@
       }
     },
     {
-      "comment": "Use Custom Script Extension to install Active Directory administration tools on the virtual machine.",
+      // Use Custom Script Extension to install Active Directory administration tools on the virtual machine."
       "apiVersion": "2017-12-01",
       "type": "Microsoft.Compute/virtualMachines/extensions",
       "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'),'/','CustomScriptExtension')]",
