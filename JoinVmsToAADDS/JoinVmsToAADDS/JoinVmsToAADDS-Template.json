@@ -44,6 +44,18 @@
       "metadata": {
         "description": "The password of the domain user account referred to by the 'domainUsername' parameter."
       }
+    },
+    "omsWorkspaceId": {
+      "type": "string",
+      "metadata": {
+        "description": "The ID of the OMS Workspace to which to connect this VM."
+      }
+    },
+    "omsWorkspaceKey": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The key of the OMS Workspace to which to connect this VM."
+      }
     }
   },
   "variables": {
@@ -77,7 +89,7 @@
     "numberOfVMsPerGroup": 2,
 
     // Test VM name prefixes
-    "vmNamePrefix": "test3vm",
+    "vmNamePrefix": "test4vm",
 
     // Domain join variables
     "domainJoinOptions": 3
@@ -248,6 +260,34 @@
           "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -File adddirectoryservices.ps1"
         },
         "protectedSettings": {}
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(variables('vmNamePrefix'), padLeft(copyindex(1),2,'0'),'/','OMSExtension')]",
+      "apiVersion": "2015-06-15",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "OMS-VMExtension"
+      },
+      "copy": {
+        "count": "[variables('numberOfVMsPerGroup')]",
+        "name": "OMS-Loop"
+      },
+      "dependsOn": [
+        "JoinToAd-Loop"
+      ],
+      "properties": {
+        "publisher": "Microsoft.EnterpriseCloud.Monitoring",
+        "type": "MicrosoftMonitoringAgent",
+        "typeHandlerVersion": "1.0",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "workspaceId": "[parameters('omsWorkspaceId')]"
+        },
+        "protectedSettings": {
+          "workspaceKey": "[parameters('omsWorkspaceKey')]"
+        }
       }
     }
   ],
