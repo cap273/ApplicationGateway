@@ -77,7 +77,7 @@
     "numberOfVMsPerGroup": 2,
 
     // Test VM name prefixes
-    "vmNamePrefix": "test2vm",
+    "vmNamePrefix": "test3vm",
 
     // Domain join variables
     "domainJoinOptions": 3
@@ -209,6 +209,11 @@
           "User": "[parameters('domainJoinUserName')]",
           "Restart": "true",
           "Options": "[variables('domainJoinOptions')]"
+          // "OUPath": "[parameters('ouPath')]",
+          // Optional: You can specify an OU Path to a custom OU, in which to
+          // add the virtual machine. If you do not specify a value for
+          // this parameter, the virtual machine is added to the default
+          // AAD DC Computers OU on the managed domain.
         },
         "protectedSettings": {
           "Password": "[parameters('domainJoinUserPassword')]"
