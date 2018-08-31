@@ -89,7 +89,7 @@
     "numberOfVMsPerGroup": 2,
 
     // Test VM name prefixes
-    "vmNamePrefix": "test4vm",
+    "vmNamePrefix": "test5vm",
 
     // Domain join variables
     "domainJoinOptions": 3

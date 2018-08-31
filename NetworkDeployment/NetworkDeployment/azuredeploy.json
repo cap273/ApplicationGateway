@@ -1,0 +1,323 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.1",
+  "parameters": {
+    "prodVNets": {
+      "type": "array",
+      "metadata": {
+        "description": "An array where each element describes a production Virtual Networks to be deployed in the production Subscription"
+      }
+    },
+    "aaddsVnet": {
+      "type": "object",
+      "metadata": {
+        "description": "The properties of the single VNet to hold an instance of Azure Active Directory Domain Services (AADDS)"
+      }
+    },
+    "aaddsProperties": {
+      "type": "object",
+      "metadata": {
+        "description": "The properties of the instance of Azure Active Directory Domain Services (AADDS)"
+      }
+    }
+  },
+  "variables": {
+    "numProdVNets": "[length(parameters('prodVNets'))]",
+
+    // If more than 3 VNets are defined in the parameter prodVNets, this variable needs to be updated
+    "peeringsIndexes": [
+      [ 1, 2 ],
+      [ 2, 0 ],
+      [ 0, 1 ]
+    ],
+
+    // Subnet for Azure AD Domain Services (AADDS)
+    "aaddsSubnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('aaddsVnet').vnetName, parameters('aaddsVnet').subnets[0].name)]"
+  },
+  "resources": [
+    {
+      "name": "[parameters('prodVNets')[copyIndex()].vnetName]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[parameters('prodVNets')[copyIndex()].azureRegion]",
+      "apiVersion": "2018-02-01",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "Prod-VNets"
+      },
+      "copy": {
+        "count": "[variables('numProdVNets')]",
+        "name": "prodVNetLoop"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('prodVNets')[copyIndex()].addressPrefix]"
+          ]
+        },
+        "subnets": "[parameters('prodVNets')[copyIndex()].subnets]",
+        "dhcpOptions": {
+          "dnsServers": [
+            "[concat(split(parameters('aaddsVnet').subnets[0].properties.addressPrefix,'0/')[0],'4')]",
+            "[concat(split(parameters('aaddsVnet').subnets[0].properties.addressPrefix,'0/')[0],'5')]"
+          ]
+        }
+      }
+    },
+    {
+      "apiVersion": "2016-06-01",
+      "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
+      "name": "[concat(parameters('prodVNets')[copyIndex()].vnetName,'/','Peer-',parameters('prodVNets')[copyIndex()].vnetName,'-to-',parameters('prodVNets')[variables('peeringsIndexes')[copyIndex()][0]].vnetName)]",
+      "dependsOn": [
+        "prodVNetLoop"
+      ],
+      // "comments": "This is the VNet peering definition *from* all VNets *to* the 1st Prod VNet adjacent to them (in the array defining all VNets)"
+      "copy": {
+        "count": "[variables('numProdVNets')]",
+        "name": "prodVNetPeeringsLoop-1"
+      },
+      "location": "[parameters('prodVNets')[copyIndex()].azureRegion]",
+      "properties": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": false,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false,
+        "remoteVirtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('prodVNets')[variables('peeringsIndexes')[copyIndex()][0]].vnetName)]"
+        }
+      }
+    },
+    {
+      "apiVersion": "2016-06-01",
+      "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
+      "name": "[concat(parameters('prodVNets')[copyIndex()].vnetName,'/','Peer-',parameters('prodVNets')[copyIndex()].vnetName,'-to-',parameters('prodVNets')[variables('peeringsIndexes')[copyIndex()][1]].vnetName)]",
+      "dependsOn": [
+        "prodVNetLoop"
+      ],
+      // "comments": "This is the VNet peering definition *from* all Prod VNets *to* the 2nd Prod VNet adjacent to them (in the array defining all VNets)"
+      "copy": {
+        "count": "[variables('numProdVNets')]",
+        "name": "prodVNetPeeringsLoop-2"
+      },
+      "location": "[parameters('prodVNets')[copyIndex()].azureRegion]",
+      "properties": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": false,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false,
+        "remoteVirtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('prodVNets')[variables('peeringsIndexes')[copyIndex()][1]].vnetName)]"
+        }
+      }
+    },
+    {
+      "apiVersion": "2016-06-01",
+      "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
+      "name": "[concat(parameters('prodVNets')[copyIndex()].vnetName,'/','Peer-',parameters('prodVNets')[copyIndex()].vnetName,'-to-',parameters('aaddsVnet').vnetName)]",
+      "dependsOn": [
+        "prodVNetLoop",
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('aaddsVnet').vnetName)]"
+      ],
+      // "comments": "This is the VNet peering definition *from* all Prod VNets *to* the AADDS VNet"
+      "copy": {
+        "count": "[variables('numProdVNets')]",
+        "name": "prodVNetPeerings-to-AADDS-Loop"
+      },
+      "location": "[parameters('prodVNets')[copyIndex()].azureRegion]",
+      "properties": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": false,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false,
+        "remoteVirtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('aaddsVnet').vnetName)]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/NetworkSecurityGroups",
+      "name": "[parameters('aaddsProperties').nsgName]",
+      "apiVersion": "2017-06-01",
+      "location": "[parameters('aaddsVnet').azureRegion]",
+      "tags": {
+        "displayName": "AADDS-NSG"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "AllowSyncWithAzureAD",
+            "properties": {
+              "access": "Allow",
+              "priority": 101,
+              "direction": "Inbound",
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "443"
+            }
+          },
+          {
+            "name": "AllowRD",
+            "properties": {
+              "access": "Allow",
+              "priority": 201,
+              "direction": "Inbound",
+              "protocol": "Tcp",
+              "sourceAddressPrefixes": [
+                "207.68.190.32/27",
+                "13.106.78.32/27",
+                "13.106.174.32/27",
+                "13.106.4.96/27"
+              ],
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "3389"
+            }
+          },
+          {
+            "name": "AllowPSRemotingSliceP",
+            "properties": {
+              "access": "Allow",
+              "priority": 301,
+              "direction": "Inbound",
+              "protocol": "Tcp",
+              "sourceAddressPrefixes": [
+                "52.180.179.108",
+                "52.180.177.87",
+                "13.75.105.168",
+                "52.175.18.134",
+                "52.138.68.41",
+                "52.138.65.157",
+                "104.41.159.212",
+                "104.45.138.161",
+                "52.169.125.119",
+                "52.169.218.0",
+                "52.187.19.1",
+                "52.187.120.237",
+                "13.78.172.246",
+                "52.161.110.169",
+                "52.174.189.149",
+                "40.68.160.142",
+                "40.83.144.56",
+                "13.64.151.161"
+              ],
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "5986"
+            }
+          },
+          {
+            "name": "AllowPSRemotingSliceT",
+            "properties": {
+              "access": "Allow",
+              "priority": 302,
+              "direction": "Inbound",
+              "protocol": "Tcp",
+              "sourceAddressPrefixes": [
+                "52.180.183.67",
+                "52.180.181.39",
+                "52.175.28.111",
+                "52.175.16.141",
+                "52.138.70.93",
+                "52.138.64.115",
+                "40.80.146.22",
+                "40.121.211.60",
+                "52.138.143.173",
+                "52.169.87.10",
+                "13.76.171.84",
+                "52.187.169.156",
+                "13.78.174.255",
+                "13.78.191.178",
+                "40.68.163.143",
+                "23.100.14.28",
+                "13.64.188.43",
+                "23.99.93.197"
+              ],
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "5986"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('aaddsVnet').vnetName]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[parameters('aaddsVnet').azureRegion]",
+      "apiVersion": "2018-02-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('aaddsProperties').nsgName)]"
+      ],
+      "tags": {
+        "displayName": "AADDS-VNets"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('aaddsVnet').addressPrefix]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[parameters('aaddsVnet').subnets[0].name]",
+            "properties": {
+              "addressPrefix": "[parameters('aaddsVnet').subnets[0].properties.addressPrefix]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('aaddsProperties').nsgName)]"
+              }
+            }
+          }
+        ],
+        "dhcpOptions": {
+          "dnsServers": [
+            "[concat(split(parameters('aaddsVnet').subnets[0].properties.addressPrefix,'0/')[0],'4')]",
+            "[concat(split(parameters('aaddsVnet').subnets[0].properties.addressPrefix,'0/')[0],'5')]"
+          ]
+        }
+      }
+    },
+    {
+      "apiVersion": "2016-06-01",
+      "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
+      "name": "[concat(parameters('aaddsVnet').vnetName,'/','Peer-',parameters('aaddsVnet').vnetName,'-to-',parameters('prodVNets')[copyIndex()].vnetName)]",
+      "dependsOn": [
+        "prodVNetLoop",
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('aaddsVnet').vnetName)]"
+      ],
+      // "comments": "This is the VNet peering definition *from* all Prod VNets *to* the AADDS VNet"
+      "copy": {
+        "count": "[variables('numProdVNets')]",
+        "name": "aaddsVNetPeerings-to-ProdVNets-Loop"
+      },
+      "location": "[parameters('aaddsVnet').azureRegion]",
+      "properties": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": false,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false,
+        "remoteVirtualNetwork": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('prodVNets')[copyIndex()].vnetName)]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.AAD/DomainServices",
+      "name": "[parameters('aaddsProperties').aaddsDomainName]",
+      "apiVersion": "2017-06-01",
+      "tags": {
+        "displayName": "AzureADDomainServices"
+      },
+      "location": "[parameters('aaddsVnet').azureRegion]",
+      "properties": {
+        "domainName": "[parameters('aaddsProperties').aaddsDomainName]",
+        "subnetId": "[variables('aaddsSubnetRef')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/', parameters('aaddsVnet').vnetName)]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('aaddsProperties').nsgName)]"
+      ]
+    }
+  ],
+  "outputs": {}
+}
