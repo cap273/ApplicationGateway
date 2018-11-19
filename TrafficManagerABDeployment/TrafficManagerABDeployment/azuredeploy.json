@@ -1,0 +1,301 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "virtualNetwork": {
+      "type": "object",
+      "metadata": {
+        "description": "Virtual Network object"
+      }
+    },
+    "vmNamePrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "Prefix of the VM name"
+      }
+    },
+    "numberOfEnvironments": {
+      "type": "int",
+      "defaultValue": 2,
+      "metadata": {
+        "description": "Number of VMs to deploy (for this purpose, also number of distinct app environments)"
+      }
+    },
+    "dnsLabels": {
+      "type": "array",
+      "metadata": {
+        "description": "Array of DNS labels for the public IP addresses to be deployed for each environment/VM. Must be lowercase. It should match with the following regular expression: ^[a-z][a-z0-9-]{1,61}[a-z0-9]$ or it will raise an error."
+      }
+    },
+    "vmImage": {
+      "type": "object",
+      "metadata": {
+        "description": "Details of each VM to deployed."
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "Username for the local administrator of the VMs"
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Password for the local administrator of the VMs"
+      }
+    },
+    "trafficManagerConfig": {
+      "type": "object",
+      "metadata": {
+        "description": "Details of the Traffic Manager profile configuration"
+      }
+    },
+    "nsgName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Network Security Group (NSG)"
+      }
+    }
+  },
+  "variables": {
+    "publicIpNamePrefix": "[concat(parameters('vmNamePrefix'),'-pip')]",
+    "nicNamePrefix": "[concat(parameters('vmNamePrefix'),'-nic')]",
+    "subnetRef": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetwork').name, parameters('virtualNetwork').defaultSubnet.name)]"
+  },
+  "resources": [
+    {
+      "name": "[parameters('virtualNetwork').name]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2018-02-01",
+      "dependsOn": [
+        "[concat('Microsoft.Network/networkSecurityGroups/', parameters('nsgName'))]"
+      ],
+      "tags": {
+        "displayName": "Test-VNet"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": "[parameters('virtualNetwork').addressPrefixes]"
+        },
+        "subnets": [
+          {
+            "name": "[parameters('virtualNetwork').defaultSubnet.name]",
+            "properties": {
+              "addressPrefix":"[parameters('virtualNetwork').defaultSubnet.addressPrefix]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('nsgName')]",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2018-08-01",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "NSG"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "web_rule",
+            "properties": {
+              "description": "Allow-WEB",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2017-03-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[concat(variables('publicIpNamePrefix'),padLeft(copyindex(1),2,'0'))]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "PublicIPs-IIS-VMs"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[parameters('dnsLabels')[copyIndex()]]"
+        }
+      },
+      "copy": {
+        "count": "[parameters('numberOfEnvironments')]",
+        "name": "pipLoop"
+      }
+    },
+    {
+      "apiVersion": "2017-03-01",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(variables('nicNamePrefix'),padLeft(copyindex(1),2,'0'))]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "NICs-IIS-VMs"
+      },
+      "copy": {
+        "count": "[parameters('numberOfEnvironments')]",
+        "name": "nicLoop"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks/', parameters('virtualNetwork').name)]",
+        "pipLoop"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "properties": {
+              "subnet": {
+                "id": "[variables('subnetRef')]"
+              },
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses',concat(variables('publicIpNamePrefix'),padLeft(copyindex(1),2,'0')))]"
+              }
+            },
+            "name": "ipcon"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(parameters('vmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
+      "location": "[resourceGroup().location]",
+      "copy": {
+        "count": "[parameters('numberOfEnvironments')]",
+        "name": "vmLoop"
+      },
+      "tags": {
+        "displayName": "IIS-VMs"
+      },
+      "dependsOn": [
+        "nicLoop"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmImage').vmSize]"
+        },
+        "osProfile": {
+          "computerName": "[concat(parameters('vmNamePrefix'), padLeft(copyindex(1),2,'0'))]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[parameters('vmImage').publisher]",
+            "offer": "[parameters('vmImage').offer]",
+            "sku": "[parameters('vmImage').osVersion]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[concat('VD-',parameters('vmNamePrefix'), padLeft(copyindex(1),2,'0'), '-OS-Disk')]",
+            "caching": "ReadWrite",
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "Standard_LRS"
+            }
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat(variables('nicNamePrefix'), padLeft(copyindex(1),2,'0')))]",
+              "properties": {
+                "primary": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "apiVersion": "2017-12-01",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(parameters('vmNamePrefix'), padLeft(copyindex(1),2,'0'),'/','CustomScriptExtension')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "CustomScriptExtension-IIS"
+      },
+      "copy": {
+        "count": "[parameters('numberOfEnvironments')]",
+        "name": "vmExtensionLoop"
+      },
+      "dependsOn": [
+        "vmLoop"
+      ],
+      "properties": {
+        "publisher": "Microsoft.Compute",
+        "type": "CustomScriptExtension",
+        "typeHandlerVersion": "1.8",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "fileUris": [
+            "https://raw.githubusercontent.com/davidmu1/samplescripts/master/appgatewayurl.ps1"
+          ],
+          "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -File appgatewayurl.ps1"
+        },
+        "protectedSettings": {}
+      }
+    },
+    {
+      "apiVersion": "2017-05-01",
+      "type": "Microsoft.Network/trafficManagerProfiles",
+      "name": "[parameters('trafficManagerConfig').name]",
+      "location": "global",
+      "tags": {
+        "displayName": "Traffic-Manager-Profile"
+      },
+      "dependsOn": [
+        "pipLoop"
+      ],
+      "properties": {
+        "profileStatus": "Enabled",
+        "trafficRoutingMethod": "Weighted",
+        "dnsConfig": {
+          "relativeName": "[parameters('trafficManagerConfig').dnsNamePrefix]",
+          "ttl": 30
+        },
+        "monitorConfig": {
+          "protocol": "TCP",
+          "port": 80
+        },
+        "endpoints": [
+          {
+            "name": "Endpoint01",
+            "type": "Microsoft.Network/trafficManagerProfiles/azureEndpoints",
+            "properties": {
+              "targetResourceId": "[resourceId('Microsoft.Network/publicIPAddresses',concat(variables('publicIpNamePrefix'), '01'))]",
+              "endpointStatus": "Enabled",
+              "weight": 1
+            }
+          },
+          {
+            "name": "Endpoint02",
+            "type": "Microsoft.Network/trafficManagerProfiles/azureEndpoints",
+            "properties": {
+              "targetResourceId": "[resourceId('Microsoft.Network/publicIPAddresses',concat(variables('publicIpNamePrefix'), '02'))]",
+              "endpointStatus": "Disabled",
+              "weight": 1
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "outputs": {}
+}

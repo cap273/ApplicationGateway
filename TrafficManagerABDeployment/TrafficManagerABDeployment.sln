@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28010.2041
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{151D2E53-A2C4-4D7D-83FE-D05416EBD58E}") = "TrafficManagerABDeployment", "TrafficManagerABDeployment\TrafficManagerABDeployment.deployproj", "{30F726C2-5B7A-4D83-AF4F-8C3195D34056}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{30F726C2-5B7A-4D83-AF4F-8C3195D34056}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{30F726C2-5B7A-4D83-AF4F-8C3195D34056}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{30F726C2-5B7A-4D83-AF4F-8C3195D34056}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{30F726C2-5B7A-4D83-AF4F-8C3195D34056}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E4814CDE-E236-4D6E-A52D-0A0FACEBE2DE}
+	EndGlobalSection
+EndGlobal

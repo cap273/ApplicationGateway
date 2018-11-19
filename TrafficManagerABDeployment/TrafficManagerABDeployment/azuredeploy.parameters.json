@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "virtualNetwork": {
+      "value": {
+        "name": "Test-VNet",
+        "addressPrefixes": [
+          "10.0.0.0/16"
+        ],
+        "defaultSubnet": {
+          "name": "default",
+          "addressPrefix": "10.0.0.0/24"
+        }
+      }
+    },
+    "vmNamePrefix": {
+      "value": "testvm"
+    },
+    "vmImage": {
+      "value": {
+        "publisher": "MicrosoftWindowsServer",
+        "offer": "WindowsServer",
+        "osVersion": "2016-Datacenter",
+        "vmSize": "Standard_D1_v2"
+      }
+    },
+    "dnsLabels": {
+      "value": [
+        "alpha2carlosdeployment",
+        "beta2carlosdeployment"
+      ]
+    },
+    "adminUsername": {
+      "value": "charliebrown"
+    },
+    "trafficManagerConfig": {
+      "value": {
+        "name": "Test-TrafficManager-Profile",
+        "dnsNamePrefix": "carlostrafficmanager",
+        "osVersion": "2016-Datacenter",
+        "vmSize": "Standard_D1_v2"
+      }
+    },
+    "numberOfEnvironments": {
+      "value": 2
+    },
+    "nsgName": {
+      "value": "Test-NSG"
+    }
+  }
+}
